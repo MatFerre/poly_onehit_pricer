@@ -1,9 +1,11 @@
+import pandas as pd
 import numpy as np
 from scipy.stats import norm
-from poly_data import get_polymarket_data
-import pandas as pd
+import matplotlib.pyplot as plt
+import requests
+from get_data import get_btc_price_binance
 
-def pricing_one_touch_stable(S, K, T_jours, sigma, r=0.045, direction='call'):
+def pricing_one_touch_stable(S, K, T_jours, sigma, direction, r=0.045):
     """
     S : Prix Spot (ex: 96500)
     K : Strike / Barrière (ex: 100000)
@@ -17,13 +19,11 @@ def pricing_one_touch_stable(S, K, T_jours, sigma, r=0.045, direction='call'):
     
     # 2. Vérification immédiate : Est-ce déjà gagné ?
     # Si on parie à la hausse (Call) et qu'on est DÉJÀ au-dessus du strike
-    if direction == 'call' and S >= K:
-        print(f"⚠️ Déjà ITM (Spot {S} >= Strike {K}) -> 100%")
+    if direction == 1 and S >= K:
         return 100.0
         
     # Si on parie à la baisse (Put) et qu'on est DÉJÀ en-dessous du strike
-    if direction == 'put' and S <= K:
-        print(f"⚠️ Déjà ITM (Spot {S} <= Strike {K}) -> 100%")
+    if direction == 0 and S <= K:
         return 100.0
 
     # 3. Paramètres mathématiques (Reiner & Rubinstein)
@@ -32,7 +32,7 @@ def pricing_one_touch_stable(S, K, T_jours, sigma, r=0.045, direction='call'):
         lam = np.sqrt(mu**2 + 2 * r / sigma**2)
         
         # 4. Calcul selon la direction (avec inversion pour stabilité)
-        if direction == 'call':
+        if direction == 1:
             # UP-AND-IN : La barrière est en HAUT (K > S)
             # On utilise le ratio (S/K) qui est < 1 pour éviter l'explosion
             ratio = S / K 
@@ -62,19 +62,17 @@ def pricing_one_touch_stable(S, K, T_jours, sigma, r=0.045, direction='call'):
     except Exception as e:
         print(f"Erreur Math: {e}")
         return 0.0
-
-# --- TEST DE DEBUG ---
-if __name__ == "__main__":
-    slug = "what-price-will-bitcoin-hit-in-february-2026"
-    data = get_polymarket_data(slug)
     
-    datapd = pd.DataFrame(data)
-    print(datapd)
+def filling_table(row):
+    theorical_price = pricing_one_touch_stable(S, K= row["strike"], T_jours = 10, sigma=0.65, direction = row["direction"])
+    return theorical_price
 
-    datapd.to_csv('data.csv', index=False) 
 
-    print(f"{'DIR':<5} | {'STRIKE':<15} | {'PRIX':<10}")
-    print("-" * 35)
-    for row in data:
-        print(f"{row['direction']:<5} | {row['strike']:<15} | {row['price']:.3f}")
-
+if __name__ == "__main__":
+    S = get_btc_price_binance()
+    sigma = 0.75
+    df = pd.read_csv(r"C:\Users\utilisateur\Desktop\programmation\Polymarket\data.csv")
+    df["strike"]=df["strike"].str.replace(",","").astype(float)
+    print(df)
+    df["theorical_price"] = df.apply(filling_table, axis =1)
+    df.to_csv("data_priced.csv")
